@@ -17,7 +17,7 @@
            #-}
 module Data.Generics.ClassyPlate.Core
   ( -- public functions and classes
-    ClassyPlate, SmartClassyPlate
+    ClassyPlate, SmartClassyPlate, SmartClassyPlate'
     -- generator functions and datatypes
   , bottomUp_, bottomUpM_, smartTraverse_, smartTraverseM_
   , descend_, descendM_, topDown_, topDownM_
@@ -83,13 +83,15 @@ class GoodOperationFor c b => ClassyPlate c b where
   topDown_ :: ClsToken c -> (forall a . (ClassyPlate c a, c a) => a -> a) -> b -> b
   topDownM_ :: Monad m => ClsToken c -> (forall a . (ClassyPlate c a, c a) => a -> m a) -> b -> m b
 
+type SmartClassyPlate c b = SmartClassyPlate' c (ClassIgnoresSubtree c b) b
+
 -- | A class for traversals that use a polymorphic function to visit all applicable elements but only visit the 
 -- parts where the applicable elements could be found.
-class (GoodOperationForAuto c b) => SmartClassyPlate c (sel :: Bool) b where
+class (GoodOperationForAuto c b) => SmartClassyPlate' c (sel :: Bool) b where
   smartTraverse_ :: FlagToken sel -> ClsToken c -> (forall a . (ClassyPlate c a, c a) => a -> a) -> b -> b
   smartTraverseM_ :: Monad m => FlagToken sel -> ClsToken c -> (forall a . (ClassyPlate c a, c a) => a -> m a) -> b -> m b
 
-instance (GoodOperationForAuto c b) => SmartClassyPlate c True b where
+instance (GoodOperationForAuto c b) => SmartClassyPlate' c True b where
   smartTraverse_ _ t f a = app (undefined :: FlagToken (AppSelector c b)) t f a
   {-# INLINE smartTraverse_ #-}
   smartTraverseM_ _ t f a = appM (undefined :: FlagToken (AppSelector c b)) t f a

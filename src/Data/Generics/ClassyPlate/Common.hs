@@ -21,10 +21,13 @@ import Data.Generics.ClassyPlate.TypePrune
 class MonoMatch a b where
   -- | Apply a monomorphic function on a polymorphic data structure.
   monoApp :: (a -> a) -> b -> b
+  monoAppM :: (a -> m a) -> b -> m b
 
 instance MonoMatch a a where
   monoApp = id
   {-# INLINE monoApp #-}
+  monoAppM = id
+  {-# INLINE monoAppM #-}
 
 type instance AppSelector (MonoMatch a) b = TypEq a b
   
@@ -73,13 +76,13 @@ selectiveTraverseM :: forall c b m . (Monad m, ClassyPlate c b) => (forall a . (
 selectiveTraverseM trf = descendM @c ((\(e, go) -> if go then selectiveTraverseM @c trf e else return e) <=< trf)
 
 -- | Traverse only those parts of the data structure that could possibly contain elements that the given function can be applied on
-smartTraverse :: forall c b . SmartClassyPlate c (ClassIgnoresSubtree c b) b 
+smartTraverse :: forall c b . SmartClassyPlate c b 
               => (forall a . (ClassyPlate c a, c a) => a -> a) -> b -> b
 {-# INLINE smartTraverse #-}
 smartTraverse = smartTraverse_ (undefined :: FlagToken (ClassIgnoresSubtree c b)) (undefined :: ClsToken c)
 
 -- | Traverse only those parts of the data structure that could possibly contain elements that the given monadic function can be applied on
-smartTraverseM :: forall c b m . (SmartClassyPlate c (ClassIgnoresSubtree c b) b, Monad m) 
+smartTraverseM :: forall c b m . (SmartClassyPlate c b, Monad m) 
                => (forall a . (ClassyPlate c a, c a) => a -> m a) -> b -> m b
 {-# INLINE smartTraverseM #-}
 smartTraverseM = smartTraverseM_ (undefined :: FlagToken (ClassIgnoresSubtree c b)) (undefined :: ClsToken c)

@@ -41,7 +41,7 @@ makeAutoCPForDataType :: Name -> Type -> [TyVarBndr] -> [ConRep] -> Dec
 makeAutoCPForDataType name headType tvs cons
   = let clsVar = mkName "c"
      in InstanceD Nothing (generateAutoCtx clsVar headType cons) 
-                          (ConT ''SmartClassyPlate 
+                          (ConT ''SmartClassyPlate'
                             `AppT` VarT clsVar 
                             `AppT` ConT 'False  
                             `AppT` headType) 
@@ -76,7 +76,7 @@ generateDefs clsVar headType tyName cons =
 generateAutoCtx :: Name -> Type -> [ConRep] -> Cxt
 generateAutoCtx clsVar selfType cons 
   = (ConT ''GoodOperationForAuto `AppT` VarT clsVar `AppT` selfType) 
-      : map (\t -> (ConT ''SmartClassyPlate `AppT` VarT clsVar
+      : map (\t -> (ConT ''SmartClassyPlate' `AppT` VarT clsVar
                       `AppT` (ConT ''ClassIgnoresSubtree `AppT` VarT clsVar `AppT` t)) `AppT` t)
             (concatMap (\(_, args) -> catMaybes args) cons)
 

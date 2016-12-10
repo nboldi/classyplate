@@ -51,8 +51,15 @@ type family GetElementTypesFields (cons :: Symbol) (n :: Nat) (t :: *) (checked 
     = -- only one field should be on the lhs
       GetElementTypesFields cons n t checked fld1 `Union` GetElementTypesFields cons n t checked fld2
   GetElementTypesFields cons n t checked (S1 (MetaSel fld unp str laz) (Rec0 innerT)) 
-    = If (IsIgnoredField cons n fld (IgnoredFields t)) '[] (GetElementTypesField checked (Find innerT checked) innerT)  
+    = WhenNotIgnoredElementTypes (IsIgnoredField cons n fld (IgnoredFields t)) checked innerT
   GetElementTypesFields cons n t checked U1 = '[]
+
+type family WhenNotIgnoredElementTypes (ignored :: Bool) (checked :: [*]) (innerT :: *) :: [*] where
+  WhenNotIgnoredElementTypes False checked innerT = '[]
+  WhenNotIgnoredElementTypes True checked innerT = EvalGetElementTypesField checked innerT
+
+type family EvalGetElementTypesField checked innerT where
+  EvalGetElementTypesField checked innerT = GetElementTypesField checked (MyFind () innerT checked) innerT
 
 type family IsIgnoredField (cons :: Symbol) (fldNum :: Nat) (fldSelector :: Maybe Symbol)
                            (ignored :: [Either (Symbol, Nat) Symbol]) :: Bool where
@@ -62,3 +69,8 @@ type family IsIgnoredField (cons :: Symbol) (fldNum :: Nat) (fldSelector :: Mayb
 type family GetElementTypesField (checked :: [*]) (inChecked :: Bool) (typ :: *) where 
   GetElementTypesField checked True typ = '[]
   GetElementTypesField checked False typ = Insert typ (GetMemberTypes (typ ': checked) typ)
+
+type family MyFind info x ys where
+    MyFind info x '[]       = 'False
+    MyFind info x (x ': ys) = 'True
+    MyFind info x (y ': ys) = MyFind info x ys
