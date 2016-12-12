@@ -3,6 +3,7 @@
 module Main where
 
 
+import MiniLangExample
 import Data.Generics.ClassyPlate
 import Example
 
