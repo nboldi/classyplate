@@ -8,12 +8,15 @@
            , FlexibleContexts
            , RankNTypes
            , TypeFamilies
+           , TemplateHaskell
+           , UndecidableInstances
            #-}
 -- | Wrappers and common functionality for classyplates
 module Data.Generics.ClassyPlate.Common where
 
 import Control.Monad
 
+import Data.Generics.ClassyPlate.TH
 import Data.Generics.ClassyPlate.Core
 import Data.Generics.ClassyPlate.TypePrune
 
@@ -86,3 +89,31 @@ smartTraverseM :: forall c b m . (SmartClassyPlate c b, Monad m)
                => (forall a . (ClassyPlate c a, c a) => a -> m a) -> b -> m b
 {-# INLINE smartTraverseM #-}
 smartTraverseM = smartTraverseM_ (undefined :: FlagToken (ClassIgnoresSubtree c b)) (undefined :: ClsToken c)
+
+-- * Commonly used instances
+
+-- The [] instance is optimized, will invoke the app only once on a list
+instance (GoodOperationFor c [a], ClassyPlate c a) => ClassyPlate c [a] where
+  topDown_ t f ls = map (topDown_ t f) $ app (undefined :: FlagToken (AppSelector c [a])) t f ls
+  topDownM_ t f ls = mapM (topDownM_ t f) =<< appM (undefined :: FlagToken (AppSelector c [a])) t f ls
+
+  bottomUp_ t f ls = app (undefined :: FlagToken (AppSelector c [a])) t f $ map (bottomUp_ t f) ls
+  bottomUpM_ t f ls = appM (undefined :: FlagToken (AppSelector c [a])) t f =<< mapM (bottomUpM_ t f) ls
+
+  descend_ t f ls = map (appTD (undefined :: FlagToken (AppSelector c a)) t f (descend_ t f)) ls
+  descendM_ t f ls = mapM (appTDM (undefined :: FlagToken (AppSelector c a)) t f (descendM_ t f)) ls 
+
+-- we don't need to do addition check here
+instance (GoodOperationForAuto c [a], SmartClassyPlate' c flag a) => SmartClassyPlate' c flag [a] where
+  smartTraverse_ _ t f ls = map (smartTraverse_ (undefined :: FlagToken flag) t f) $ app (undefined :: FlagToken (AppSelector c [a])) t f ls
+  smartTraverseM_ _ t f ls = mapM (smartTraverseM_ (undefined :: FlagToken flag) t f) =<< appM (undefined :: FlagToken (AppSelector c [a])) t f ls
+
+type instance IgnoredFields [a] = '[]
+
+
+makeClassyPlate [] ''(,)
+makeClassyPlate [] ''(,,)
+makeClassyPlate [] ''(,,,)
+makeClassyPlate [] ''Maybe
+makeClassyPlate [] ''Either
+makeClassyPlate [] ''Bool

@@ -1,5 +1,5 @@
 {-# LANGUAGE TemplateHaskellQuotes #-} 
-module Data.Generics.ClassyPlate.TH (makeClassyPlate) where
+module Data.Generics.ClassyPlate.TH (makeClassyPlate, TraverseSelector(..)) where
 
 import Data.Maybe
 import Data.Either
@@ -13,7 +13,12 @@ import Data.Generics.ClassyPlate.TypePrune
 
 -- TODO: make the definitions inlineable, and try speed gains by inlining
 
-type PrimitiveMarkers = [Either (Name,Integer) Name]
+data TraverseSelector = IgnoreField Name
+                      | IgnoreArg Name Integer
+                      | IsPrimitive
+  deriving Eq
+
+type PrimitiveMarkers = [TraverseSelector]
 
 -- | Creates ClassyPlate instances for a datatype. Can specify which fields should not be traversed.
 makeClassyPlate :: PrimitiveMarkers -> Name -> Q [Dec]
@@ -24,23 +29,23 @@ makeClassyPlate primitives dataType
                    _ -> error $ "Cannot create classyplate for " ++ show dataType ++ " only data and newtype declarations are supported."
   where createClassyPlate name tvs cons 
           = let headType = foldl AppT (ConT name) (map (VarT . getTVName) tvs)
-             in return $ [ makeNormalCPForDataType name headType tvs (map (getConRep primitives) cons)
-                         , makeAutoCPForDataType name headType tvs (map (getConRep primitives) cons)
-                         , makeIgnoredFieldsTF headType primitives
-                         ]
+             in sequence $ [ makeNormalCPForDataType name headType tvs (map (getConRep primitives) cons)
+                           , makeAutoCPForDataType name headType tvs (map (getConRep primitives) cons)
+                           , return $ makeIgnoredFieldsTF headType primitives
+                           ]
 
-makeNormalCPForDataType :: Name -> Type -> [TyVarBndr] -> [ConRep] -> Dec
+makeNormalCPForDataType :: Name -> Type -> [TyVarBndr] -> [ConRep] -> Q Dec
 makeNormalCPForDataType name headType tvs cons
-  = let clsVar = mkName "c"
-     in InstanceD Nothing (generateCtx clsVar headType cons) 
+  = do clsVar <- newName "c"
+       return $ InstanceD Nothing (generateCtx clsVar headType cons) 
                           (ConT ''ClassyPlate `AppT` VarT clsVar `AppT` headType) 
                           (generateDefs clsVar headType name cons)
 
 -- | Creates the @ClassyPlate@
-makeAutoCPForDataType :: Name -> Type -> [TyVarBndr] -> [ConRep] -> Dec
+makeAutoCPForDataType :: Name -> Type -> [TyVarBndr] -> [ConRep] -> Q Dec
 makeAutoCPForDataType name headType tvs cons
-  = let clsVar = mkName "c"
-     in InstanceD Nothing (generateAutoCtx clsVar headType cons) 
+  = do clsVar <- newName "c"
+       return $ InstanceD Nothing (generateAutoCtx clsVar headType cons) 
                           (ConT ''SmartClassyPlate'
                             `AppT` VarT clsVar 
                             `AppT` ConT 'False  
@@ -51,10 +56,10 @@ makeAutoCPForDataType name headType tvs cons
 makeIgnoredFieldsTF :: Type -> PrimitiveMarkers -> Dec
 makeIgnoredFieldsTF typ ignored 
   = TySynInstD ''IgnoredFields (TySynEqn [typ] (foldr typeListCons PromotedNilT ignored))
-  where typeListCons :: Either (Name, Integer) Name -> Type -> Type
-        typeListCons (Right fld) = ((PromotedConsT `AppT` (PromotedT 'Right `AppT` (LitT $ StrTyLit $ nameBase fld))) `AppT`)
-        typeListCons (Left (cons, n)) = ((PromotedConsT `AppT` (PromotedT 'Left `AppT` tupType)) `AppT`)
-          where tupType = PromotedTupleT 2 `AppT` (LitT $ StrTyLit $ nameBase cons) `AppT` (LitT $ NumTyLit $ fromIntegral n)
+  where typeListCons :: TraverseSelector -> Type -> Type
+        typeListCons (IgnoreField fld) = ((PromotedConsT `AppT` (PromotedT 'PrIgnoreField `AppT` (LitT $ StrTyLit $ nameBase fld))) `AppT`)
+        typeListCons (IgnoreArg cons n) = ((PromotedConsT `AppT` (PromotedT 'PrIgnoreArg `AppT` (LitT $ StrTyLit $ nameBase cons) `AppT` (LitT $ NumTyLit $ fromIntegral n))) `AppT`)
+        typeListCons IsPrimitive = ((PromotedConsT `AppT` (PromotedT 'PrIsPrimitive)) `AppT`)
 
 generateCtx :: Name -> Type -> [ConRep] -> Cxt
 generateCtx clsVar selfType cons 
@@ -287,14 +292,14 @@ type ConRep = (Name, [Maybe Type])
 -- | Extracts the necessary information from a constructor.
 getConRep :: PrimitiveMarkers -> Con -> ConRep
 getConRep primitives (NormalC n args) 
-  = (n, map (\(i,c) -> if (n,i) `elem` lefts primitives then Nothing else Just (snd c)) (zip [0..] args))
+  = (n, map (\(i,c) -> if IsPrimitive `elem` primitives || IgnoreArg n i `elem` primitives then Nothing else Just (snd c)) (zip [0..] args))
 getConRep primitives (RecC n args) 
-  = (n, map (\(i, (fldN,_,t)) -> if fldN `elem` rights primitives || (n,i) `elem` lefts primitives 
+  = (n, map (\(i, (fldN,_,t)) -> if IsPrimitive `elem` primitives || IgnoreField fldN `elem` primitives || IgnoreArg n i `elem` primitives 
                                    then Nothing else Just t) 
           $ zip [0..] args)
 getConRep primitives (InfixC (_,t1) n (_,t2)) 
-  = (n, [ if (n,0) `elem` lefts primitives then Nothing else Just t1
-        , if (n,1) `elem` lefts primitives then Nothing else Just t2
+  = (n, [ if IsPrimitive `elem` primitives || IgnoreArg n 0 `elem` primitives then Nothing else Just t1
+        , if IsPrimitive `elem` primitives || IgnoreArg n 1 `elem` primitives then Nothing else Just t2
         ])
 getConRep primitives (ForallC _ _ c) = getConRep primitives c
 getConRep _ _ = error "GADTs are not supported"

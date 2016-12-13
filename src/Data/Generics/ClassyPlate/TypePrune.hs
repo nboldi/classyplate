@@ -5,13 +5,19 @@
            , TypeFamilies
            , UndecidableInstances
            #-}
-module Data.Generics.ClassyPlate.TypePrune (ClassIgnoresSubtree, AppSelector, AppPruning, IgnoredFields) where
+module Data.Generics.ClassyPlate.TypePrune (ClassIgnoresSubtree, AppSelector, AppPruning, IgnoredFields, PruneSelector(..)) where
 
 import GHC.Exts (Constraint)
 import GHC.Generics
 import Data.Type.Bool
 import Data.Type.List
 import GHC.TypeLits (Symbol, Nat)
+
+
+data PruneSelector = PrIgnoreField Symbol
+                   | PrIgnoreArg Symbol Nat
+                   | PrIsPrimitive
+
 
 -- | This type decides if the subtree of an element cannot contain an element that is transformed.
 type family ClassIgnoresSubtree (cls :: * -> Constraint) (typ :: *) :: Bool where
@@ -27,7 +33,7 @@ type family AppPruning (c :: * -> Constraint) (a :: *) :: Bool
 
 -- | This type family sets which fields should not be traversed when trying to generate
 -- automatically pruned versions of classy traversal.
-type family IgnoredFields (t :: *) :: [Either (Symbol, Nat) Symbol]
+type family IgnoredFields (t :: *) :: [PruneSelector]
 
 type family AnySelected (c :: * -> Constraint) (ls :: [*]) :: Bool where
   AnySelected c (fst ': rest) = AppSelector c fst || AnySelected c rest
@@ -59,6 +65,6 @@ type family GetElementTypesFields (cons :: Symbol) (n :: Nat) (t :: *) (typ :: *
   GetElementTypesFields cons n t U1 = '[]
 
 type family IsIgnoredField (cons :: Symbol) (fldNum :: Nat) (fldSelector :: Maybe Symbol)
-                           (ignored :: [Either (Symbol, Nat) Symbol]) :: Bool where
-  IsIgnoredField cons fldNum (Just sel) ignored = Find (Right sel) ignored || Find (Left '(cons, fldNum)) ignored
-  IsIgnoredField cons fldNum Nothing ignored = Find (Left '(cons, fldNum)) ignored
+                           (ignored :: [PruneSelector]) :: Bool where
+  IsIgnoredField cons fldNum (Just sel) ignored = Find (PrIgnoreField sel) ignored || Find (PrIgnoreArg cons fldNum) ignored || Find PrIsPrimitive ignored
+  IsIgnoredField cons fldNum Nothing ignored = Find (PrIgnoreArg cons fldNum) ignored || Find PrIsPrimitive ignored

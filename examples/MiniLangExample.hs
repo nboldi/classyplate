@@ -51,9 +51,9 @@ type family TransformAppSelector x where
 test = bottomUp @Transform trf $ testExpr
 test2 = smartTraverse @Transform trf $ testExpr
 
-makeClassyPlate [ Right '_annotation ] ''Ann
+makeClassyPlate [ IgnoreField '_annotation ] ''Ann
 
-makeClassyPlate [ Left ('Lit ,0) ] ''Expr
+makeClassyPlate [ IgnoreArg 'Lit 0 ] ''Expr
 makeClassyPlate [] ''Name
 
 -- $( do pl <- makeClassyPlate [ '_annotation ] ''Ann
